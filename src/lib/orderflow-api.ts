@@ -382,6 +382,44 @@ export interface UpdateLineRequest {
   itemDescription?: string;
 }
 
+export interface OrderExtractionLineDto {
+  rawLineText?: string | null;
+  itemDescription?: string | null;
+  quantity?: number | null;
+  requestedUnit?: string | null;
+  extractedAttributes?: Record<string, unknown> | null;
+  confidenceScore?: number | null;
+  clarificationQuestion?: string | null;
+}
+
+export interface OrderExtractionResultDto {
+  customerHint?: string | null;
+  projectHint?: string | null;
+  requestedDeliveryDate?: string | null;
+  deliveryNote?: string | null;
+  clarificationQuestion?: string | null;
+  missingInformation?: string[] | null;
+  lines?: OrderExtractionLineDto[] | null;
+  rawResult?: Record<string, unknown> | null;
+}
+
+export interface AgentInterpretRequest {
+  organization_code?: string;
+  actor_user_id?: UUID;
+  customer_code?: string;
+  warehouse_code?: string;
+  draft_order_id?: UUID;
+  message: string;
+  context?: Record<string, unknown>;
+}
+
+export interface AgentInterpretResponseDto {
+  answer: string;
+  extraction: OrderExtractionResultDto;
+  suggestedActions: string[];
+  guardrails: string[];
+}
+
 const TOKEN_KEY = 'orderflow_access_token';
 const USER_KEY = 'orderflow_user';
 
@@ -615,5 +653,12 @@ export const orderflowApi = {
 
   reviewActions(orderId: UUID) {
     return request<ReviewActionDto[]>(`/api/draft-orders/${orderId}/review-actions`);
+  },
+
+  agentInterpret(body: AgentInterpretRequest) {
+    return request<AgentInterpretResponseDto>('/api/agent/interpret', {
+      method: 'POST',
+      body: jsonBody(body),
+    });
   },
 };
