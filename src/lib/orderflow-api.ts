@@ -382,6 +382,27 @@ export interface UpdateLineRequest {
   itemDescription?: string;
 }
 
+export interface AgentInterpretRequest {
+  orderId?: UUID | null;
+  message: string;
+  context?: Record<string, unknown>;
+  organizationCode?: string | null;
+  actorUserId?: UUID | null;
+  customerCode?: string | null;
+  warehouseCode?: string | null;
+}
+
+export interface AgentInterpretResponse {
+  reply: string;
+  intent: string;
+  orderId?: UUID | null;
+  guardrails: string[];
+  suggestedActions: string[];
+  canExport: boolean;
+  openHoldCount: number;
+  facts: Record<string, unknown>;
+}
+
 const TOKEN_KEY = 'orderflow_access_token';
 const USER_KEY = 'orderflow_user';
 
@@ -523,6 +544,13 @@ export const orderflowApi = {
 
   createDraftOrder(body: CreateDraftOrderRequest) {
     return request<DraftOrderDetailDto>('/api/draft-orders/from-text', {
+      method: 'POST',
+      body: jsonBody(body),
+    });
+  },
+
+  interpretAgent(body: AgentInterpretRequest) {
+    return request<AgentInterpretResponse>('/api/agent/interpret', {
       method: 'POST',
       body: jsonBody(body),
     });

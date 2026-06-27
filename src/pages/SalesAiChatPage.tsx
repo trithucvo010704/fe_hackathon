@@ -1,4 +1,5 @@
 import { AlertTriangle, ArrowRight, Download, Eye, Paperclip, RefreshCw, Save, Send } from 'lucide-react';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { HoldsPanel, OrderTabs } from '../components/order-components';
 import { Badge, Button, ButtonLink, cx, MetricCard, PageHeader, Panel } from '../components/ui';
@@ -17,8 +18,20 @@ function ChatBubble({ who, text, user }: { who: string; text: string; user?: boo
   );
 }
 
+interface ChatMessage {
+  id: string;
+  who: string;
+  text: string;
+  user?: boolean;
+}
+
 export function SalesAiChatPage() {
   const { orderId } = useParams();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [checking, setChecking] = useState(false);
   const chatState = useLoadable(async () => {
     if (!orderId) throw new Error('Missing order id');
     const [detail, skus] = await Promise.all([
@@ -26,21 +39,99 @@ export function SalesAiChatPage() {
       orderflowApi.productSkus(),
     ]);
     return { detail, skusById: indexById(skus) };
-  }, [orderId]);
+  }, [orderId, refreshKey]);
 
   const detail = chatState.data?.detail ?? null;
   const order = detail?.order ?? null;
   const lines = detail?.lines.map((line) => mapLineView(line, chatState.data?.skusById)) ?? [];
   const holds = (detail?.holds ?? []).filter((hold) => hold.status === 'OPEN').map((hold) => mapHoldView(hold, order));
+  const canExport = order?.status === 'APPROVED' && holds.length === 0;
+  const contextualMessages: ChatMessage[] = [
+    {
+      id: 'context',
+      who: 'AI',
+      text: `Loaded ${orderCode(order)} with ${holds.length} open hold(s), ${lines.length} line(s), status ${order?.status ?? 'unknown'}.`,
+    },
+    {
+      id: 'next-step',
+      who: 'AI',
+      text: holds.length
+        ? `First review item: ${holds[0].type} - ${holds[0].message}`
+        : 'No open hold is blocking this order. Review matched lines, then approve if policy allows.',
+    },
+  ];
+
+  async function sendMessage(override?: string) {
+    const text = (override ?? input).trim();
+    if (!text || !orderId || sending) return;
+    const userMessage: ChatMessage = { id: `user-${Date.now()}`, who: 'Sales', text, user: true };
+    setMessages((current) => [...current, userMessage]);
+    setInput('');
+    setSending(true);
+    try {
+      const response = await orderflowApi.interpretAgent({
+        orderId,
+        message: text,
+        context: {
+          mode: 'MVP_INTERNAL_AGENT',
+          orderStatus: order?.status,
+          openHoldCount: holds.length,
+          lineCount: lines.length,
+          allowAutoApprove: false,
+          allowAutoReleaseHold: false,
+          allowAutoExport: false,
+        },
+      });
+      setMessages((current) => [
+        ...current,
+        {
+          id: `ai-${Date.now()}`,
+          who: 'AI',
+          text: response.reply,
+        },
+      ]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `ai-error-${Date.now()}`,
+          who: 'AI',
+          text: error instanceof Error ? error.message : 'Agent request failed',
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleRunChecks() {
+    if (!orderId || checking) return;
+    setChecking(true);
+    try {
+      await orderflowApi.runChecks(orderId);
+      setRefreshKey((value) => value + 1);
+      setMessages((current) => [
+        ...current,
+        { id: `checks-${Date.now()}`, who: 'AI', text: 'Backend checks completed. I refreshed the order context.' },
+      ]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        { id: `checks-error-${Date.now()}`, who: 'AI', text: error instanceof Error ? error.message : 'Run checks failed' },
+      ]);
+    } finally {
+      setChecking(false);
+    }
+  }
 
   return (
     <>
       <PageHeader
         breadcrumb={`Draft orders / ${orderCode(order)} / AI Chat`}
         title={`Sales AI Chat - ${orderCode(order)}`}
-        meta={chatState.error ? `Using demo fallback: ${chatState.error}` : 'Order context is loaded from draft-order detail.'}
+        meta={chatState.error ? `Load error: ${chatState.error}` : 'Order context is loaded from backend draft-order detail.'}
         badges={[{ label: order?.status ?? 'DEMO', tone: holds.length ? 'red' : 'green' }, { label: `${holds.length} open holds`, tone: holds.length ? 'amber' : 'green' }]}
-        actions={<><ButtonLink to={`/orders/${orderId ?? 'OF-1025'}/review`} variant="primary"><Eye size={16} /> Review</ButtonLink><Button><RefreshCw size={16} /> Run checks</Button><Button><Save size={16} /> Save note</Button><Button disabled={holds.length > 0}><Download size={16} /> Export quote</Button></>}
+        actions={<><ButtonLink to={`/orders/${orderId ?? 'OF-1025'}/review`} variant="primary"><Eye size={16} /> Review</ButtonLink><Button onClick={() => void handleRunChecks()} disabled={checking || !orderId}><RefreshCw size={16} /> {checking ? 'Running...' : 'Run checks'}</Button><Button><Save size={16} /> Save note</Button><Button disabled={!canExport}><Download size={16} /> Export quote</Button></>}
       />
       <OrderTabs orderId={orderId} />
       <div className="grid min-h-[720px] grid-cols-[300px_minmax(520px,1fr)_320px] gap-5">
@@ -65,22 +156,34 @@ export function SalesAiChatPage() {
             </div>
           </div>
         </Panel>
-        <Panel title="Chat with AI" action={<Badge tone="blue">Demo chat UI</Badge>}>
-          <p className="mb-4 text-sm text-slate-500">AI can explain and suggest. It must not approve orders, release holds, or override business rules.</p>
+        <Panel title="Chat with AI" action={<Badge tone="blue">Live API</Badge>}>
+          <p className="mb-4 text-sm text-slate-500">Guardrail: chat can explain and suggest, while approval, hold release, and export stay on review actions.</p>
           <div className="space-y-4">
-            <ChatBubble who="AI" text={`I loaded ${orderCode(order)}. There are ${holds.length} open holds and ${lines.length} lines.`} />
-            <ChatBubble who="Sales" text="Which item should I review first?" user />
-            <ChatBubble who="AI" text={holds.length ? `Start with ${holds[0].type}: ${holds[0].message}` : 'No blocking hold is open. You can review matched lines and approve if policy allows.'} />
+            {[...contextualMessages, ...messages].map((message) => (
+              <ChatBubble key={message.id} who={message.who} text={message.text} user={message.user} />
+            ))}
+            {sending && <ChatBubble who="AI" text="Thinking with current order context..." />}
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             {['Explain open holds', 'Suggest SKU action', 'Draft customer reply', 'Create review checklist'].map((chip) => (
-              <button key={chip} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">{chip}</button>
+              <button key={chip} onClick={() => void sendMessage(chip)} disabled={sending || !orderId} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400">{chip}</button>
             ))}
           </div>
           <div className="mt-5 flex items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <button className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white"><Paperclip size={18} /></button>
-            <textarea className="min-h-12 flex-1 resize-none bg-transparent text-sm outline-none" placeholder="Ask AI about this order..." />
-            <button className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white"><Send size={18} /></button>
+            <textarea
+              className="min-h-12 flex-1 resize-none bg-transparent text-sm outline-none"
+              placeholder="Ask AI about this order..."
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  void sendMessage();
+                }
+              }}
+            />
+            <button disabled={sending || !input.trim()} onClick={() => void sendMessage()} className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white disabled:cursor-not-allowed disabled:bg-slate-300"><Send size={18} /></button>
           </div>
         </Panel>
         <div className="space-y-5">
