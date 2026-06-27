@@ -1,54 +1,84 @@
 import { Bot, CreditCard, Plus } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import { HoldsPanel, OrderTable } from '../components/order-components';
 import { Button, ButtonLink, Field, MetricCard, PageHeader, Panel } from '../components/ui';
+import { orderflowApi } from '../lib/orderflow-api';
+import { formatCompactMoney, formatMoney, indexById, mapCustomerView, mapOrderItem } from '../lib/orderflow-view';
+import { useLoadable } from '../lib/use-loadable';
 
 export function CustomerDetailPage() {
+  const { customerId } = useParams();
+  const customerState = useLoadable(async () => {
+    if (!customerId) throw new Error('Missing customer id');
+    const [customer, credit, projects, orders, customers] = await Promise.all([
+      orderflowApi.customer(customerId),
+      orderflowApi.creditProfile(customerId).catch(() => null),
+      orderflowApi.customerProjects(customerId).catch(() => []),
+      orderflowApi.draftOrders().catch(() => []),
+      orderflowApi.customers().catch(() => []),
+    ]);
+    const view = mapCustomerView(customer, credit ?? undefined);
+    const customerOrders = orders.filter((order) => order.customerId === customerId);
+    return {
+      view,
+      projects,
+      orders: customerOrders.map((order) => mapOrderItem(order, undefined, indexById(customers))),
+    };
+  }, [customerId]);
+
+  const customer = customerState.data?.view;
+  const credit = customer?.credit;
+  const available = Math.max((credit?.creditLimit ?? 0) - (credit?.currentDebt ?? 0) - (credit?.overdueDebt ?? 0) - (credit?.pendingApprovedOrderAmount ?? 0), 0);
+
   return (
     <>
       <PageHeader
-        breadcrumb="Khách hàng / KH-002"
-        title="Đại lý Nam Phát"
-        meta="MST 0312456789 · Sales owner Trần Bình · Cập nhật 10 phút trước"
-        badges={[{ label: 'DEALER', tone: 'blue' }, { label: 'Đang hoạt động', tone: 'green' }, { label: 'Watch credit', tone: 'amber' }]}
-        actions={<><ButtonLink to="/orders/new" variant="primary"><Plus size={16} /> Tạo đơn mới</ButtonLink><ButtonLink to="/orders/OF-1025/ai-chat"><Bot size={16} /> Mở AI Chat</ButtonLink><Button><CreditCard size={16} /> Kiểm tra công nợ</Button><ButtonLink to="/customers">Quay lại</ButtonLink></>}
+        breadcrumb={`Customers / ${customer?.code ?? customerId ?? '-'}`}
+        title={customer?.name ?? 'Customer detail'}
+        meta={customerState.error ? `Using partial fallback: ${customerState.error}` : `${customer?.type ?? '-'} - Updated ${credit?.updatedAt ?? '-'}`}
+        badges={[{ label: customer?.type ?? 'CUSTOMER', tone: 'blue' }, { label: customer?.raw.status ?? 'ACTIVE', tone: 'green' }, { label: customer?.risk ?? 'Normal', tone: customer?.risk === 'Normal' ? 'green' : 'amber' }]}
+        actions={<><ButtonLink to="/orders/new" variant="primary"><Plus size={16} /> Create Order</ButtonLink><ButtonLink to={`/orders/${customerState.data?.orders[0]?.id ?? 'OF-1025'}/ai-chat`}><Bot size={16} /> AI Chat</ButtonLink><Button><CreditCard size={16} /> Check credit</Button><ButtonLink to="/customers">Back</ButtonLink></>}
       />
       <div className="grid grid-cols-5 gap-4">
-        <MetricCard label="Hạn mức" value="200M" tone="blue" />
-        <MetricCard label="Công nợ hiện tại" value="188M" tone="amber" />
-        <MetricCard label="Quá hạn" value="0đ" tone="green" />
-        <MetricCard label="Còn lại" value="12M" tone="amber" />
-        <MetricCard label="Đơn đang chờ" value="42.5M" tone="red" />
+        <MetricCard label="Credit limit" value={formatCompactMoney(credit?.creditLimit)} tone="blue" />
+        <MetricCard label="Current debt" value={formatCompactMoney(credit?.currentDebt)} tone={(credit?.currentDebt ?? 0) > available ? 'amber' : 'green'} />
+        <MetricCard label="Overdue" value={formatMoney(credit?.overdueDebt)} tone={(credit?.overdueDebt ?? 0) > 0 ? 'red' : 'green'} />
+        <MetricCard label="Available" value={formatCompactMoney(available)} tone={available > 0 ? 'green' : 'red'} />
+        <MetricCard label="Pending" value={formatCompactMoney(credit?.pendingApprovedOrderAmount)} tone="slate" />
       </div>
       <div className="mt-5 grid grid-cols-[1fr_340px] gap-5">
         <div className="space-y-5">
-          <Panel title="Thông tin khách hàng">
+          <Panel title="Customer information">
             <dl className="grid grid-cols-2 gap-5">
-              <Field label="Loại khách" value="Đại lý / cửa hàng" />
-              <Field label="Price tier" value="DEALER" />
-              <Field label="Người liên hệ" value="Nguyễn Văn Hùng · 0908 222 118" />
-              <Field label="Email" value="hung@namphat.vn" />
-              <Field label="Địa chỉ giao mặc định" value="12 Lê Trọng Tấn, Bình Tân, TP.HCM" />
-              <Field label="Điều khoản thanh toán" value="30 ngày" />
-              <Field label="Kho phục vụ" value="Kho Bình Dương" />
+              <Field label="Type" value={customer?.type ?? '-'} />
+              <Field label="Price tier" value={customer?.raw.defaultPriceTier ?? '-'} />
+              <Field label="Phone" value={customer?.raw.phone ?? '-'} />
+              <Field label="Address" value={customer?.raw.address ?? '-'} />
+              <Field label="Payment term" value={`${credit?.paymentTermDays ?? '-'} days`} />
+              <Field label="Sales owner" value={customer?.owner ?? '-'} />
             </dl>
           </Panel>
-          <Panel title="Dự án / địa điểm giao hàng">
+          <Panel title="Projects / delivery locations">
             <div className="grid grid-cols-3 gap-3">
-              {['PRJ-BT01 · Bình Tân', 'PRJ-Q7 · Quận 7', 'WH-NP · Kho Nam Phát'].map((project) => <div key={project} className="rounded-lg border border-slate-200 p-4 text-sm font-semibold">{project}</div>)}
+              {(customerState.data?.projects ?? []).length ? customerState.data!.projects.map((project) => (
+                <div key={project.id} className="rounded-lg border border-slate-200 p-4 text-sm font-semibold">
+                  {project.projectCode} - {project.name}
+                  <p className="mt-1 text-xs text-slate-500">{project.deliveryAddress ?? '-'}</p>
+                </div>
+              )) : <p className="text-sm text-slate-500">No projects returned.</p>}
             </div>
           </Panel>
-          <Panel title="Đơn hàng gần đây"><OrderTable compact /></Panel>
+          <Panel title="Recent orders"><OrderTable compact items={customerState.data?.orders} /></Panel>
         </div>
         <div className="space-y-5">
-          <Panel title="Tóm tắt rủi ro">
+          <Panel title="Credit risk">
             <p className="text-sm font-semibold">Credit utilization</p>
-            <div className="mt-3 h-3 rounded-full bg-slate-100"><div className="h-3 w-[94%] rounded-full bg-amber-500" /></div>
-            <p className="mt-2 text-sm text-slate-600">94% · còn 12.000.000đ · next payment 03/07/2026</p>
+            <div className="mt-3 h-3 rounded-full bg-slate-100"><div className="h-3 rounded-full bg-amber-500" style={{ width: `${Math.min((((credit?.currentDebt ?? 0) + (credit?.overdueDebt ?? 0)) / Math.max(credit?.creditLimit ?? 1, 1)) * 100, 100)}%` }} /></div>
+            <p className="mt-2 text-sm text-slate-600">{customer?.risk ?? 'Normal'} - available {formatMoney(available)}</p>
           </Panel>
-          <HoldsPanel />
-          <Panel title="Gợi ý từ AI">
-            <p className="text-sm leading-6">Nên xác nhận lịch thanh toán hoặc tách đơn trước khi approve.</p>
-            <div className="mt-4 flex gap-2"><ButtonLink to="/orders/OF-1025/ai-chat" variant="primary"><Bot size={16} /> Hỏi AI</ButtonLink><ButtonLink to="/orders/OF-1025">Xem đơn OF-1025</ButtonLink></div>
+          <HoldsPanel holds={[]} />
+          <Panel title="AI suggestion">
+            <p className="text-sm leading-6">Use credit profile and open holds before approving any new draft order.</p>
           </Panel>
         </div>
       </div>

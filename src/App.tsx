@@ -27,7 +27,7 @@ function AppRoutes() {
         <Route path="/orders/:orderId" element={<OrderDetailPage />} />
         <Route path="/orders/:orderId/review" element={<ReviewPage />} />
         <Route path="/orders/:orderId/ai-chat" element={<SalesAiChatPage />} />
-        <Route path="/orders/:orderId/chat" element={<Navigate to="/orders/OF-1025/ai-chat" replace />} />
+        <Route path="/orders/:orderId/chat" element={<SalesAiChatPage />} />
         <Route path="/orders/:orderId/preview" element={<PreviewPage />} />
         <Route path="/orders/:orderId/events" element={<EventsPage />} />
         <Route path="/holds" element={<HoldsPage />} />

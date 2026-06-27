@@ -2,31 +2,58 @@ import { ArrowRight, Database, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { OrderTable } from '../components/order-components';
 import { ButtonLink, MetricCard, PageHeader, Panel } from '../components/ui';
+import { orderflowApi } from '../lib/orderflow-api';
+import { dashboardMetrics, indexById, mapOrderItem } from '../lib/orderflow-view';
+import { useLoadable } from '../lib/use-loadable';
 
 export function DashboardPage() {
+  const dashboardState = useLoadable(async () => {
+    const [orders, customers] = await Promise.all([
+      orderflowApi.draftOrders(),
+      orderflowApi.customers(),
+    ]);
+    const customersById = indexById(customers);
+    return {
+      metrics: dashboardMetrics(orders),
+      orders: orders.slice(0, 6).map((order) => mapOrderItem(order, undefined, customersById)),
+      reviewOrders: orders.filter((order) => ['ON_HOLD', 'NEEDS_CLARIFICATION', 'READY_FOR_REVIEW'].includes(order.status)).slice(0, 5),
+    };
+  }, []);
+
+  const metrics = dashboardState.data?.metrics ?? [
+    { label: 'Orders today', value: '34', hint: 'Demo fallback', tone: 'blue' as const },
+    { label: 'Need review', value: '9', hint: 'Demo fallback', tone: 'amber' as const },
+    { label: 'Auto matched', value: '82%', hint: 'Demo fallback', tone: 'green' as const },
+    { label: 'AI time', value: '58s', hint: 'Demo fallback', tone: 'slate' as const },
+    { label: 'SLA risk', value: '3', hint: 'Demo fallback', tone: 'red' as const },
+  ];
+
   return (
     <>
       <PageHeader
         breadcrumb="Dashboard"
         title="Dashboard OrderFlow AI"
-        meta="Tổng quan đơn nháp, hold và hiệu suất AI hôm nay."
-        actions={<ButtonLink to="/orders/new" variant="primary"><Plus size={16} /> Tạo đơn nháp</ButtonLink>}
+        meta={dashboardState.error ? `Using demo fallback: ${dashboardState.error}` : 'Live overview from OrderFlow backend.'}
+        actions={<ButtonLink to="/orders/new" variant="primary"><Plus size={16} /> Create Draft Order</ButtonLink>}
       />
       <div className="grid grid-cols-5 gap-4">
-        <MetricCard label="Đơn hôm nay" value="34" hint="+12% so với hôm qua" tone="blue" />
-        <MetricCard label="Cần review" value="9" hint="4 credit, 3 SKU, 2 inventory" tone="amber" />
-        <MetricCard label="Tự khớp SKU" value="82%" hint="214/261 dòng hàng" tone="green" />
-        <MetricCard label="Thời gian AI" value="58s" hint="Trung vị mỗi đơn" tone="slate" />
-        <MetricCard label="SLA sắp trễ" value="3" hint="Cần xử lý trước 15:00" tone="red" />
+        {metrics.map((metric) => (
+          <MetricCard key={metric.label} label={metric.label} value={metric.value} hint={metric.hint} tone={metric.tone} />
+        ))}
       </div>
       <div className="mt-5 grid grid-cols-[1fr_360px] gap-5">
-        <Panel title="Đơn nháp gần đây">
-          <OrderTable compact />
+        <Panel title="Recent draft orders">
+          <OrderTable compact items={dashboardState.data?.orders} />
         </Panel>
-        <Panel title="Hold cần xử lý">
+        <Panel title="Needs review">
           <div className="space-y-3">
-            {['OF-1025 vượt hạn mức 30.5M', 'OF-1023 thiếu tồn kho phi 32', 'OF-1018 giá ngoài tier DEALER'].map((item, index) => (
-              <Link key={item} to={index === 0 ? '/orders/OF-1025/review' : '/holds'} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
+            {(dashboardState.data?.reviewOrders ?? []).length ? dashboardState.data!.reviewOrders.map((order) => (
+              <Link key={order.id} to={`/orders/${order.id}/review`} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
+                <span className="text-sm font-semibold text-slate-800">{order.orderNo} - {order.status}</span>
+                <ArrowRight size={16} className="text-slate-400" />
+              </Link>
+            )) : ['OF-1025 credit hold', 'OF-1023 stock hold', 'OF-1018 price hold'].map((item) => (
+              <Link key={item} to="/holds" className="flex items-center justify-between rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
                 <span className="text-sm font-semibold text-slate-800">{item}</span>
                 <ArrowRight size={16} className="text-slate-400" />
               </Link>
@@ -36,9 +63,9 @@ export function DashboardPage() {
       </div>
       <div className="mt-5 grid grid-cols-3 gap-5">
         {[
-          ['Raw text', 34, 'Tin nhắn đã nhận'],
-          ['AI extraction', 31, 'Đơn bóc tách thành công'],
-          ['Approved', 18, 'Đơn đã duyệt/xuất'],
+          ['Raw text', dashboardState.data?.metrics[0]?.value ?? '34', 'Received draft order text'],
+          ['Rule-ready', dashboardState.data?.metrics[1]?.value ?? '9', 'Orders in review states'],
+          ['Approved', dashboardState.data?.metrics[2]?.value ?? '18', 'Approved/exported orders'],
         ].map(([label, value, hint]) => (
           <Panel key={label as string}>
             <div className="flex items-center gap-4">

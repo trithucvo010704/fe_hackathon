@@ -78,11 +78,13 @@ export function Button({
   variant = 'secondary',
   onClick,
   disabled,
+  type = 'button',
 }: {
   children: React.ReactNode;
   variant?: 'primary' | 'secondary' | 'danger';
   onClick?: () => void;
   disabled?: boolean;
+  type?: 'button' | 'submit';
 }) {
   const variants = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700',
@@ -92,7 +94,7 @@ export function Button({
 
   return (
     <button
-      type="button"
+      type={type}
       disabled={disabled}
       onClick={onClick}
       className={cx(
