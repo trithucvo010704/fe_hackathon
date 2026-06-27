@@ -1,0 +1,176 @@
+export type BadgeTone = 'blue' | 'green' | 'amber' | 'red' | 'slate' | 'purple';
+export type MetricTone = 'blue' | 'green' | 'amber' | 'red' | 'slate';
+
+export const orders = [
+  {
+    id: 'OF-1025',
+    customer: 'Đại lý Nam Phát',
+    source: 'Zalo',
+    owner: 'Trần Bình',
+    createdAt: '27/06/2026 09:42',
+    total: '42.500.000đ',
+    lines: 3,
+    matched: '2/3',
+    holds: ['Credit hold', 'SKU cần xác nhận'],
+    status: 'ON_HOLD',
+  },
+  {
+    id: 'OF-1024',
+    customer: 'Cửa hàng Minh Châu',
+    source: 'Email',
+    owner: 'Minh Anh',
+    createdAt: '27/06/2026 08:55',
+    total: '18.200.000đ',
+    lines: 4,
+    matched: '4/4',
+    holds: [],
+    status: 'READY',
+  },
+  {
+    id: 'OF-1023',
+    customer: 'Nhà phân phối Gia Hưng',
+    source: 'Manual',
+    owner: 'Quốc Huy',
+    createdAt: '26/06/2026 16:22',
+    total: '87.900.000đ',
+    lines: 8,
+    matched: '8/8',
+    holds: ['Inventory hold'],
+    status: 'ON_HOLD',
+  },
+  {
+    id: 'OF-1019',
+    customer: 'Đại lý Nam Phát',
+    source: 'Zalo',
+    owner: 'Trần Bình',
+    createdAt: '25/06/2026 10:14',
+    total: '21.700.000đ',
+    lines: 2,
+    matched: '2/2',
+    holds: [],
+    status: 'APPROVED',
+  },
+];
+
+export const draftLines = [
+  {
+    row: 1,
+    original: 'ống PPR Bình Minh phi 25 PN20',
+    sku: 'PPR-BM-25-PN20',
+    qty: '300 cây',
+    price: '125.000đ',
+    amount: '37.500.000đ',
+    status: 'Matched',
+  },
+  {
+    row: 2,
+    original: 'co 90 phi 25',
+    sku: 'CO90-BM-25',
+    qty: '120 cái',
+    price: '23.000đ',
+    amount: '2.760.000đ',
+    status: 'Matched',
+  },
+  {
+    row: 3,
+    original: 'keo dán',
+    sku: 'Cần xác nhận SKU',
+    qty: '20 hộp',
+    price: '112.000đ',
+    amount: '2.240.000đ',
+    status: 'Needs review',
+  },
+];
+
+export const products = [
+  {
+    sku: 'PPR-BM-25-PN20',
+    name: 'Ống PPR Bình Minh phi 25 PN20',
+    brand: 'Bình Minh',
+    unit: 'cây',
+    stock: 1260,
+    reserved: 300,
+    price: '125.000đ',
+    status: 'ACTIVE',
+  },
+  {
+    sku: 'CO90-BM-25',
+    name: 'Co 90 PPR Bình Minh phi 25',
+    brand: 'Bình Minh',
+    unit: 'cái',
+    stock: 840,
+    reserved: 120,
+    price: '23.000đ',
+    status: 'ACTIVE',
+  },
+  {
+    sku: 'GLUE-PPR-BM-500',
+    name: 'Keo dán PPR Bình Minh 500g',
+    brand: 'Bình Minh',
+    unit: 'hộp',
+    stock: 36,
+    reserved: 0,
+    price: '118.000đ',
+    status: 'ACTIVE',
+  },
+  {
+    sku: 'GLUE-PPR-STD-250',
+    name: 'Keo dán PPR tiêu chuẩn 250g',
+    brand: 'Generic',
+    unit: 'hộp',
+    stock: 18,
+    reserved: 0,
+    price: '72.000đ',
+    status: 'WATCH',
+  },
+];
+
+export const customers = [
+  {
+    id: 'KH-002',
+    name: 'Đại lý Nam Phát',
+    type: 'DEALER',
+    owner: 'Trần Bình',
+    debt: '188.000.000đ',
+    limit: '200.000.000đ',
+    available: '12.000.000đ',
+    risk: 'Watch credit',
+  },
+  {
+    id: 'KH-003',
+    name: 'Cửa hàng Minh Châu',
+    type: 'STORE',
+    owner: 'Minh Anh',
+    debt: '32.000.000đ',
+    limit: '100.000.000đ',
+    available: '68.000.000đ',
+    risk: 'Normal',
+  },
+  {
+    id: 'KH-004',
+    name: 'Nhà phân phối Gia Hưng',
+    type: 'DISTRIBUTOR',
+    owner: 'Quốc Huy',
+    debt: '405.000.000đ',
+    limit: '500.000.000đ',
+    available: '95.000.000đ',
+    risk: 'Inventory watch',
+  },
+];
+
+export const events = [
+  ['09:42:08', 'RAW_TEXT_RECEIVED', 'Nhận tin nhắn từ Zalo', 'system'],
+  ['09:42:16', 'AI_EXTRACTION_COMPLETED', 'Bóc tách 3 dòng hàng', 'ai'],
+  ['09:42:31', 'SKU_MATCH_PARTIAL', '2/3 SKU được khớp tự động', 'ai'],
+  ['09:42:45', 'PRICE_CHECK_OK', 'Áp đúng price tier DEALER', 'rules'],
+  ['09:42:52', 'CREDIT_CHECK_FAILED', 'Vượt hạn mức 30.500.000đ', 'rules'],
+  ['09:43:10', 'HOLD_CREATED', 'Tạo hold công nợ và hold SKU', 'system'],
+];
+
+export const orderTabs = [
+  { label: 'Tổng quan', to: '/orders/OF-1025' },
+  { label: 'Review', to: '/orders/OF-1025/review' },
+  { label: 'AI Chat', to: '/orders/OF-1025/ai-chat' },
+  { label: 'Preview', to: '/orders/OF-1025/preview' },
+  { label: 'Events', to: '/orders/OF-1025/events' },
+];

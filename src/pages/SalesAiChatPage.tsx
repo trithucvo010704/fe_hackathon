@@ -1,0 +1,217 @@
+import { AlertTriangle, ArrowRight, Download, Eye, Paperclip, RefreshCw, Save, Send } from 'lucide-react';
+import { useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { HoldsPanel, OrderTabs } from '../components/order-components';
+import { Badge, Button, ButtonLink, cx, MetricCard, PageHeader, Panel } from '../components/ui';
+import { orderflowApi } from '../lib/orderflow-api';
+import { formatCompactMoney, indexById, mapHoldView, mapLineView, orderCode } from '../lib/orderflow-view';
+import { useLoadable } from '../lib/use-loadable';
+
+function ChatBubble({ who, text, user }: { who: string; text: string; user?: boolean }) {
+  return (
+    <div className={cx('flex', user ? 'justify-end' : 'justify-start')}>
+      <div className={cx('max-w-[620px] rounded-lg px-4 py-3 text-sm leading-6', user ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-800')}>
+        <p className={cx('mb-1 text-xs font-bold', user ? 'text-blue-100' : 'text-slate-500')}>{who}</p>
+        <p>{text}</p>
+      </div>
+    </div>
+  );
+}
+
+interface ChatMessage {
+  id: string;
+  who: string;
+  text: string;
+  user?: boolean;
+}
+
+export function SalesAiChatPage() {
+  const { orderId } = useParams();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const chatState = useLoadable(async () => {
+    if (!orderId) throw new Error('Missing order id');
+    const [detail, skus] = await Promise.all([
+      orderflowApi.draftOrder(orderId),
+      orderflowApi.productSkus(),
+    ]);
+    return { detail, skusById: indexById(skus) };
+  }, [orderId, refreshKey]);
+
+  const detail = chatState.data?.detail ?? null;
+  const order = detail?.order ?? null;
+  const lines = detail?.lines.map((line) => mapLineView(line, chatState.data?.skusById)) ?? [];
+  const holds = (detail?.holds ?? []).filter((hold) => hold.status === 'OPEN').map((hold) => mapHoldView(hold, order));
+  const canExport = order?.status === 'APPROVED' && holds.length === 0;
+  const contextualMessages: ChatMessage[] = [
+    {
+      id: 'context',
+      who: 'AI',
+      text: `Loaded ${orderCode(order)} with ${holds.length} open hold(s), ${lines.length} line(s), status ${order?.status ?? 'unknown'}.`,
+    },
+    {
+      id: 'next-step',
+      who: 'AI',
+      text: holds.length
+        ? `First review item: ${holds[0].type} - ${holds[0].message}`
+        : 'No open hold is blocking this order. Review matched lines, then approve if policy allows.',
+    },
+  ];
+
+  async function sendMessage(override?: string) {
+    const text = (override ?? input).trim();
+    if (!text || !orderId || sending) return;
+    const userMessage: ChatMessage = { id: `user-${Date.now()}`, who: 'Sales', text, user: true };
+    setMessages((current) => [...current, userMessage]);
+    setInput('');
+    setSending(true);
+    try {
+      const response = await orderflowApi.interpretAgent({
+        orderId,
+        message: text,
+        context: {
+          mode: 'MVP_INTERNAL_AGENT',
+          orderStatus: order?.status,
+          openHoldCount: holds.length,
+          lineCount: lines.length,
+          allowAutoApprove: false,
+          allowAutoReleaseHold: false,
+          allowAutoExport: false,
+        },
+      });
+      setMessages((current) => [
+        ...current,
+        {
+          id: `ai-${Date.now()}`,
+          who: 'AI',
+          text: response.reply,
+        },
+      ]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `ai-error-${Date.now()}`,
+          who: 'AI',
+          text: error instanceof Error ? error.message : 'Agent request failed',
+        },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleRunChecks() {
+    if (!orderId || checking) return;
+    setChecking(true);
+    try {
+      await orderflowApi.runChecks(orderId);
+      setRefreshKey((value) => value + 1);
+      setMessages((current) => [
+        ...current,
+        { id: `checks-${Date.now()}`, who: 'AI', text: 'Backend checks completed. I refreshed the order context.' },
+      ]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        { id: `checks-error-${Date.now()}`, who: 'AI', text: error instanceof Error ? error.message : 'Run checks failed' },
+      ]);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <>
+      <PageHeader
+        breadcrumb={`Draft orders / ${orderCode(order)} / AI Chat`}
+        title={`Sales AI Chat - ${orderCode(order)}`}
+        meta={chatState.error ? `Load error: ${chatState.error}` : 'Order context is loaded from backend draft-order detail.'}
+        badges={[{ label: order?.status ?? 'DEMO', tone: holds.length ? 'red' : 'green' }, { label: `${holds.length} open holds`, tone: holds.length ? 'amber' : 'green' }]}
+        actions={<><ButtonLink to={`/orders/${orderId ?? 'OF-1025'}/review`} variant="primary"><Eye size={16} /> Review</ButtonLink><Button onClick={() => void handleRunChecks()} disabled={checking || !orderId}><RefreshCw size={16} /> {checking ? 'Running...' : 'Run checks'}</Button><Button><Save size={16} /> Save note</Button><Button disabled={!canExport}><Download size={16} /> Export quote</Button></>}
+      />
+      <OrderTabs orderId={orderId} />
+      <div className="grid min-h-[720px] grid-cols-[300px_minmax(520px,1fr)_320px] gap-5">
+        <Panel title="Order context" className="self-start">
+          <div className="space-y-5">
+            <div>
+              <p className="font-bold">{orderCode(order)}</p>
+              <p className="mt-1 text-sm text-slate-500">{order?.status ?? 'Demo'} - Customer {order?.customerId ?? '-'}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <MetricCard label="Total" value={formatCompactMoney(order?.totalAmount)} tone="slate" />
+              <MetricCard label="Hold" value={String(holds.length)} tone={holds.length ? 'red' : 'green'} />
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6">{detail?.rawOrderText?.rawText ?? 'No raw text loaded.'}</div>
+            <div className="space-y-2">
+              {lines.map((line) => (
+                <div key={line.id} className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-sm font-semibold">{line.sku}</p>
+                  <p className="text-xs text-slate-500">{line.qty} - {line.status}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Panel>
+        <Panel title="Chat with AI" action={<Badge tone="blue">Live API</Badge>}>
+          <p className="mb-4 text-sm text-slate-500">Guardrail: chat can explain and suggest, while approval, hold release, and export stay on review actions.</p>
+          <div className="space-y-4">
+            {[...contextualMessages, ...messages].map((message) => (
+              <ChatBubble key={message.id} who={message.who} text={message.text} user={message.user} />
+            ))}
+            {sending && <ChatBubble who="AI" text="Thinking with current order context..." />}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {['Explain open holds', 'Suggest SKU action', 'Draft customer reply', 'Create review checklist'].map((chip) => (
+              <button key={chip} onClick={() => void sendMessage(chip)} disabled={sending || !orderId} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400">{chip}</button>
+            ))}
+          </div>
+          <div className="mt-5 flex items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <button className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white"><Paperclip size={18} /></button>
+            <textarea
+              className="min-h-12 flex-1 resize-none bg-transparent text-sm outline-none"
+              placeholder="Ask AI about this order..."
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  void sendMessage();
+                }
+              }}
+            />
+            <button disabled={sending || !input.trim()} onClick={() => void sendMessage()} className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white disabled:cursor-not-allowed disabled:bg-slate-300"><Send size={18} /></button>
+          </div>
+        </Panel>
+        <div className="space-y-5">
+          <Panel title="Data & actions">
+            <div className="grid grid-cols-3 gap-2">
+              <MetricCard label="Lines" value={String(lines.length)} tone="blue" />
+              <MetricCard label="Holds" value={String(holds.length)} tone={holds.length ? 'red' : 'green'} />
+              <MetricCard label="Status" value={order?.status ?? '-'} tone="slate" />
+            </div>
+          </Panel>
+          <HoldsPanel holds={holds} />
+          <Panel title="Quick actions">
+            <div className="space-y-2">
+              {['Add note to order', 'Create review action', 'Open customer detail', 'Run checks after SKU selection'].map((item) => (
+                <button key={item} className="flex w-full items-center justify-between rounded-lg border border-slate-200 p-3 text-left text-sm font-semibold hover:bg-slate-50">
+                  {item}<ArrowRight size={15} />
+                </button>
+              ))}
+            </div>
+          </Panel>
+          <Panel>
+            <div className="flex gap-3 text-sm leading-6 text-amber-800">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+              AI suggestions are advisory. Backend rule checks and human review remain the source of approval.
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </>
+  );
+}

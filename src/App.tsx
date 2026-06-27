@@ -1,91 +1,52 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AppShell } from './components/AppShell';
+import { CreateOrderPage } from './pages/CreateOrderPage';
+import { CustomerDetailPage } from './pages/CustomerDetailPage';
+import { CustomersPage } from './pages/CustomersPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { EventsPage } from './pages/EventsPage';
+import { HoldsPage } from './pages/HoldsPage';
+import { LoginPage } from './pages/LoginPage';
+import { OrderDetailPage } from './pages/OrderDetailPage';
+import { OrdersPage } from './pages/OrdersPage';
+import { PreviewPage } from './pages/PreviewPage';
+import { ProductDetailPage } from './pages/ProductDetailPage';
+import { ProductsPage } from './pages/ProductsPage';
+import { ReviewPage } from './pages/ReviewPage';
+import { SalesAiChatPage } from './pages/SalesAiChatPage';
 
-// Global Contexts & Providers
-import { AuthProvider } from '@/lib/contexts/AuthContext';
-import { LayoutProvider } from '@/components/Common/LayoutContext';
-import { ConfirmProvider } from '@/components/Modal/ConfirmContext';
-import ToastContainer from '@/components/Common/Toast';
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<AppShell />}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders/new" element={<CreateOrderPage />} />
+        <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+        <Route path="/orders/:orderId/review" element={<ReviewPage />} />
+        <Route path="/orders/:orderId/ai-chat" element={<SalesAiChatPage />} />
+        <Route path="/orders/:orderId/chat" element={<SalesAiChatPage />} />
+        <Route path="/orders/:orderId/preview" element={<PreviewPage />} />
+        <Route path="/orders/:orderId/events" element={<EventsPage />} />
+        <Route path="/holds" element={<HoldsPage />} />
+        <Route path="/products" element={<ProductsPage />} />
+        <Route path="/products/:sku" element={<ProductDetailPage />} />
+        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
+}
 
-// Pages
-import Home from './pages/page';
-import ProjectsPage from './pages/projects/page';
-import NewProjectPage from './pages/projects/new/page';
-import ProjectDetailsRedirect from './pages/projects/[id]/page';
-import ProjectLayout from './pages/projects/[id]/layout';
-import OverviewTab from './pages/projects/[id]/overview/page';
-import BacklogTab from './pages/projects/[id]/backlog/page';
-import SprintTab from './pages/projects/[id]/sprint/page';
-import EpicsTab from './pages/projects/[id]/epics/page';
-import StoriesTab from './pages/projects/[id]/stories/page';
-import RepositoriesTab from './pages/projects/[id]/repositories/page';
-import DocumentsTab from './pages/projects/[id]/documents/page';
-import ApiSpecsTab from './pages/projects/[id]/api-specs/page';
-import DbSpecsTab from './pages/projects/[id]/db-specs/page';
-import SettingsTab from './pages/projects/[id]/settings/page';
-import EditProject from './pages/projects/[id]/edit/page';
-
-import ChatPage from './pages/chat/page';
-import GuidelinesPage from './pages/guidelines/page';
-import LogoutPage from './pages/logout/page';
-import AuthCallbackPage from './pages/auth/callback/page';
-
-import AdminUsersPage from './pages/admin/users/page';
-import AdminRolesPage from './pages/admin/roles/page';
-import AiModelsPage from './pages/admin/ai/models/page';
-import AiEnvsPage from './pages/admin/ai/envs/page';
-import AiBrainsPage from './pages/admin/ai/brains/page';
-
-export default function App() {
+function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <LayoutProvider>
-          <ConfirmProvider>
-            <Routes>
-              {/* Core App Routes */}
-              <Route path="/" element={<Home />} />
-              <Route path="/projects" element={<ProjectsPage />} />
-              <Route path="/projects/new" element={<NewProjectPage />} />
-              
-              {/* Dynamic Project Routes */}
-              <Route path="/projects/:id" element={<ProjectDetailsRedirect />} />
-              <Route path="/projects/:id/edit" element={<EditProject />} />
-              
-              {/* Nested Project Details Routes (wrapped in ProjectLayout) */}
-              <Route element={<ProjectLayout />}>
-                <Route path="/projects/:id/overview" element={<OverviewTab />} />
-                <Route path="/projects/:id/backlog" element={<BacklogTab />} />
-                <Route path="/projects/:id/sprint" element={<SprintTab />} />
-                <Route path="/projects/:id/epics" element={<EpicsTab />} />
-                <Route path="/projects/:id/stories" element={<StoriesTab />} />
-                <Route path="/projects/:id/repositories" element={<RepositoriesTab />} />
-                <Route path="/projects/:id/documents" element={<DocumentsTab />} />
-                <Route path="/projects/:id/api-specs" element={<ApiSpecsTab />} />
-                <Route path="/projects/:id/db-specs" element={<DbSpecsTab />} />
-                <Route path="/projects/:id/settings" element={<SettingsTab />} />
-              </Route>
-
-              {/* Chat & Others */}
-              <Route path="/chat" element={<ChatPage />} />
-              <Route path="/guidelines" element={<GuidelinesPage />} />
-              <Route path="/logout" element={<LogoutPage />} />
-              <Route path="/auth/callback" element={<AuthCallbackPage />} />
-
-              {/* Admin Panel */}
-              <Route path="/admin/users" element={<AdminUsersPage />} />
-              <Route path="/admin/roles" element={<AdminRolesPage />} />
-              <Route path="/admin/ai/models" element={<AiModelsPage />} />
-              <Route path="/admin/ai/envs" element={<AiEnvsPage />} />
-              <Route path="/admin/ai/brains" element={<AiBrainsPage />} />
-
-              {/* Fallback redirect */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-            <ToastContainer />
-          </ConfirmProvider>
-        </LayoutProvider>
-      </AuthProvider>
+      <AppRoutes />
     </BrowserRouter>
   );
 }
+
+export default App;
