@@ -40,9 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# docs
-docs
-
 ### IntelliJ IDEA ###
 .idea
 *.iws
@@ -50,4 +47,9 @@ docs
 *.ipr
 
 /dist
+
+# generated/cache
+scratch/
+__pycache__/
+*.pyc
 
